@@ -1,7 +1,7 @@
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require("@whiskeysockets/baileys");
-const qrcode = require("qrcode-terminal");
 const path = require("path");
 
+const PHONE_NUMBER = "254105573726";
 const AUTH_DIR = path.resolve(__dirname, ".whatsapp-auth");
 
 async function startBot() {
@@ -10,6 +10,7 @@ async function startBot() {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
+    mobile: false,
     logger: {
       level: "silent",
       trace: () => {}, debug: () => {}, info: () => {},
@@ -23,16 +24,27 @@ async function startBot() {
     }
   });
 
-  sock.ev.on("connection.update", (update) => {
+  let paired = false;
+
+  sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    if (qr) {
-      console.log("\n===========================================");
-      console.log("   NETLINK AGENCIES — WhatsApp Bot");
-      console.log("   Scan the QR code below with WhatsApp");
-      console.log("===========================================\n");
-      qrcode.generate(qr, { small: true });
-      console.log("\n  Waiting for scan...\n");
+    // Use pairing code instead of QR
+    if (qr && !paired) {
+      try {
+        const code = await sock.requestPairingCode(PHONE_NUMBER);
+        console.log("\n===========================================");
+        console.log("   NETLINK AGENCIES — WhatsApp Bot");
+        console.log("===========================================");
+        console.log(`\n📱 PAIRING CODE: ${code}\n`);
+        console.log("Go to WhatsApp → Settings → Linked Devices");
+        console.log("→ Link a Device → Link with phone number");
+        console.log(`→ Enter code: ${code}`);
+        console.log("\nWaiting for pairing...\n");
+        paired = true;
+      } catch (err) {
+        console.error("Failed to get pairing code:", err.message);
+      }
     }
 
     if (connection === "close") {
@@ -40,8 +52,10 @@ async function startBot() {
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       if (loggedOut) {
         console.log("Logged out. Delete .whatsapp-auth folder and restart.");
+        process.exit(1);
       } else {
         console.log(`Disconnected (code ${statusCode}). Reconnecting in 3s...`);
+        paired = false;
         setTimeout(() => startBot(), 3000);
       }
     }
@@ -73,7 +87,6 @@ async function startBot() {
 
       let reply = "";
 
-      // Main menu
       if (["hi", "hello", "hey", "menu", "start", "0"].includes(input)) {
         reply =
           `🏢 *NETLINK AGENCIES* 🏢\n\n` +
@@ -85,8 +98,6 @@ async function startBot() {
           `4️⃣ 4 — 🤝 Talk to Agent\n\n` +
           `_Reply with the number or keyword_`;
       }
-
-      // Withdraw
       else if (["1", "withdraw"].includes(input)) {
         reply =
           `💸 *WITHDRAWAL*\n` +
@@ -99,8 +110,6 @@ async function startBot() {
           `──────────────────────\n` +
           `Reply *0* or *menu* to go back 🏠`;
       }
-
-      // Deposit
       else if (["2", "deposit"].includes(input)) {
         reply =
           `💰 *DEPOSIT*\n` +
@@ -113,8 +122,6 @@ async function startBot() {
           `──────────────────────\n` +
           `Reply *0* or *menu* to go back 🏠`;
       }
-
-      // Pay
       else if (["3", "pay"].includes(input)) {
         reply =
           `💳 *PAY*\n` +
@@ -127,8 +134,6 @@ async function startBot() {
           `──────────────────────\n` +
           `Reply *0* or *menu* to go back 🏠`;
       }
-
-      // Talk to Agent
       else if (["4", "agent", "talk to agent"].includes(input)) {
         reply =
           `🤝 *TALK TO AGENT*\n` +
@@ -139,8 +144,6 @@ async function startBot() {
           `──────────────────────\n` +
           `Reply *0* or *menu* to go back 🏠`;
       }
-
-      // Unknown
       else {
         reply =
           `❓ I didn't understand that.\n\n` +
