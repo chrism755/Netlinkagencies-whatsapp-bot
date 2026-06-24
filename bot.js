@@ -1,4 +1,4 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, makeCacheableSignalKeyStore } = require("@whiskeysockets/baileys");
 const path = require("path");
 
 const PHONE_NUMBER = "254105573726";
@@ -8,9 +8,22 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   const sock = makeWASocket({
-    auth: state,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, {
+        level: "silent",
+        trace: () => {}, debug: () => {}, info: () => {},
+        warn: () => {}, error: () => {}, fatal: () => {},
+        child: () => ({
+          level: "silent",
+          trace: () => {}, debug: () => {}, info: () => {},
+          warn: () => {}, error: () => {}, fatal: () => {},
+          child: () => ({})
+        })
+      })
+    },
     printQRInTerminal: false,
-    mobile: false,
+    browser: ["Ubuntu", "Chrome", "20.0.04"],
     logger: {
       level: "silent",
       trace: () => {}, debug: () => {}, info: () => {},
@@ -24,26 +37,31 @@ async function startBot() {
     }
   });
 
-  let paired = false;
+  let codeSent = false;
 
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    // Use pairing code instead of QR
-    if (qr && !paired) {
+    if (qr && !codeSent) {
+      codeSent = true;
+      console.log("QR received, requesting pairing code...");
       try {
+        await new Promise(r => setTimeout(r, 3000));
         const code = await sock.requestPairingCode(PHONE_NUMBER);
         console.log("\n===========================================");
         console.log("   NETLINK AGENCIES — WhatsApp Bot");
         console.log("===========================================");
-        console.log(`\n📱 PAIRING CODE: ${code}\n`);
-        console.log("Go to WhatsApp → Settings → Linked Devices");
-        console.log("→ Link a Device → Link with phone number");
-        console.log(`→ Enter code: ${code}`);
-        console.log("\nWaiting for pairing...\n");
-        paired = true;
+        console.log(`\n📱 YOUR PAIRING CODE: ${code}\n`);
+        console.log("Steps:");
+        console.log("1. Open WhatsApp on your phone");
+        console.log("2. Go to Settings → Linked Devices");
+        console.log("3. Tap Link a Device");
+        console.log("4. Tap 'Link with phone number instead'");
+        console.log(`5. Enter: ${code}`);
+        console.log("\nWaiting for you to enter the code...\n");
       } catch (err) {
-        console.error("Failed to get pairing code:", err.message);
+        console.error("Pairing code error:", err.message);
+        codeSent = false;
       }
     }
 
@@ -51,17 +69,17 @@ async function startBot() {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       if (loggedOut) {
-        console.log("Logged out. Delete .whatsapp-auth folder and restart.");
+        console.log("Logged out. Restart to re-pair.");
         process.exit(1);
       } else {
-        console.log(`Disconnected (code ${statusCode}). Reconnecting in 3s...`);
-        paired = false;
-        setTimeout(() => startBot(), 3000);
+        console.log(`Disconnected (code ${statusCode}). Reconnecting in 5s...`);
+        codeSent = false;
+        setTimeout(() => startBot(), 5000);
       }
     }
 
     if (connection === "open") {
-      console.log("\n✅ NETLINK AGENCIES WhatsApp Bot is connected!\n");
+      console.log("\n✅ NETLINK AGENCIES WhatsApp Bot is LIVE!\n");
     }
   });
 
