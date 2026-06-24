@@ -1,0 +1,13 @@
+{
+  "name": "netlink-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "NETLINK AGENCIES WhatsApp Bot",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
